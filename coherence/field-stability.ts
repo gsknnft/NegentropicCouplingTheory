@@ -10,7 +10,7 @@
 // Depends on linear algebra utilities (e.g., matrix solve, dot product)
 // Ties to coherence loop: Uses M(t), V(t); adds resonance check for binding event
 
-import { CoherenceState } from "../packages/coherence/types";
+import { CoherenceState } from "../coherence/types";
 
 export type Vector3 = [number, number, number];
 
