@@ -1,8 +1,5 @@
 # Coherence Engineering v0
 
-> Status:
-> This is a v0 substrate specification. Estimators, thresholds, and coupling laws are intentionally under-specified and expected to evolve per domain.
-
 This package captures the ASIS <-> NCT mapping, the Coherence Loop primitive,
 and a minimal implementation skeleton that can be wired into transport or runtime layers.
 
@@ -10,21 +7,21 @@ and a minimal implementation skeleton that can be wired into transport or runtim
 
 Think "eye diagram / BER / COM" but generalized to any adaptive system.
 
-| High-Speed SI (ASIS)            | What it really is             | NCT / Coherence Engineering analogue                           | How to compute (v0)                              | Practical telemetry examples                                                |
-| ------------------------------- | ----------------------------- | -------------------------------------------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------- |
-| Eye height / eye width          | Safe operating margin         | Coherence Margin M(t)                                          | 1 - norm_entropy(residuals)                      | latency tail gap, success-rate margin, queue slack, invariant slack         |
-| BER                             | Ultimate reliability outcome  | Failure rate / error density (trailing indicator)             | failures/window + slope                          | tx failures, revert rate, timeout rate, invalid state incidence             |
-| Jitter (RJ/DJ), phase noise     | Timing uncertainty / drift    | Drift Velocity V(t), "entropy velocity"                       | dM/dt + PSD peak tracking                        | slope of p95 latency, slope of failure probability, volatility of residuals |
-| ISI (intersymbol interference)  | Past symbols corrupt future   | History contamination / coupling memory                        | autocorr(residuals) + backlog decay              | retry cascades, queue coupling, backlog ghosting, feedback oscillation      |
-| Crosstalk                       | Channels interfere            | Cross-domain interference                                      | corrcoef(metrics) + spike count                  | correlated failures across subsystems, contention spillover                 |
-| Reflections / ringing           | Control loop instability      | Overcorrection / flip-flop                                     | sign flips of delta(C) per window                | oscillating batch size, unstable routing decisions                          |
-| Equalization                    | Compensate for channel loss   | Adaptive coupling                                              | apply controller delta C                         | throttle, batch shrink, redundancy increase, reroute, rephase               |
-| Clock recovery (CDR)            | Re-lock timing/phase          | Rephase / resync                                               | phase skew threshold -> resync                   | reset window, renegotiate handshake, re-derive shared state                 |
-| Termination / impedance match   | Reduce reflections            | Boundary conditions                                            | enforce queue/concurrency caps                   | queue caps, concurrency limits, bounded retries, bounded memory             |
-| COM (channel operating margin)  | Statistical SNR reserve       | Negentropic Reserve R(t)                                       | R = clamp(snr_proxy * confidence)                | redundancy budget, slack budget, compute slack                              |
-| TDR                             | Locate impedance discontinuity| Fault localization                                             | per-link delta(M,V) gradient blame               | identify which link/module causes drift; gradient-based blame assignment    |
-| EMI / switching noise           | Self-generated environment    | Ambient internal field noise                                   | variance-of-variance vs load                     | load-induced variance, contention heat, correlated bursts                   |
-| Link training                   | Calibrate channel at start    | Warm-up / calibration epoch                                    | baseline window -> M0,V0,R0                      | baseline metrics, initial coupling coefficients, early safe mode            |
+| High-Speed SI (ASIS)            | What it really is             | NCT / Coherence Engineering analogue                           | Practical telemetry examples                                                |
+| ------------------------------- | ----------------------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Eye height / eye width          | Safe operating margin         | Coherence Margin M(t)                                          | latency tail gap, success-rate margin, queue slack, invariant slack         |
+| BER                             | Ultimate reliability outcome  | Failure rate / error density (trailing indicator)             | tx failures, revert rate, timeout rate, invalid state incidence             |
+| Jitter (RJ/DJ), phase noise     | Timing uncertainty / drift    | Drift Velocity V(t), "entropy velocity"                       | slope of p95 latency, slope of failure probability, volatility of residuals |
+| ISI (intersymbol interference)  | Past symbols corrupt future   | History contamination / coupling memory                        | retry cascades, queue coupling, backlog ghosting, feedback oscillation      |
+| Crosstalk                       | Channels interfere            | Cross-domain interference                                      | correlated failures across subsystems, contention spillover                 |
+| Reflections / ringing           | Control loop instability      | Overcorrection / flip-flop                                     | oscillating batch size, unstable routing decisions                          |
+| Equalization                    | Compensate for channel loss   | Adaptive coupling                                              | throttle, batch shrink, redundancy increase, reroute, rephase               |
+| Clock recovery (CDR)            | Re-lock timing/phase          | Rephase / resync                                               | reset window, renegotiate handshake, re-derive shared state                 |
+| Termination / impedance match   | Reduce reflections            | Boundary conditions                                            | queue caps, concurrency limits, bounded retries, bounded memory             |
+| COM (channel operating margin)  | Statistical SNR reserve       | Negentropic Reserve R(t)                                       | redundancy budget, slack budget, compute slack                              |
+| TDR                             | Locate impedance discontinuity| Fault localization                                             | identify which link/module causes drift; gradient-based blame assignment    |
+| EMI / switching noise           | Self-generated environment    | Ambient internal field noise                                   | load-induced variance, contention heat, correlated bursts                   |
+| Link training                   | Calibrate channel at start    | Warm-up / calibration epoch                                    | baseline metrics, initial coupling coefficients, early safe mode            |
 
 Key punchline:
 ASIS is margin accounting + drift detection + recovery loops. That is the NCT framing.
@@ -60,12 +57,12 @@ Supporting guards:
 Collect field signals without interrogating agents:
 latency distribution, queue slope, error entropy, variance-of-variance, phase skew between components, contention heat, correlation spikes.
 
-2) Estimate Margin (M, V, R) - "eye opening"
+2) Estimate Margin (M, V, R) - “eye opening”
 Compute margin, drift, reserve.
 
 3) Predict (collapse horizon)
 Estimate H(t) using current M and V (with caps). 
-- T_collapse ~= M(t) / max(eps, -dM/dt) (only if drifting down)
+- T_collapse ≈ M(t) / max(ε, -dM/dt) (only if drifting down)
 
 4) Adapt (coupling update)
 Adjust C(t) to restore safe horizon; apply damping.
@@ -80,20 +77,20 @@ Stability rule
 
 Never optimize for M(t) as a reward.
 
-Treat M(t) as a field constraint, like voltage margin -- you don't "maximize" it; you stay within safe operating bounds.
+Treat M(t) as a field constraint, like voltage margin — you don’t “maximize” it; you stay within safe operating bounds.
 
 ```
-loop every dt:
-  S <- ambient_sample()              # no agent interrogation, only field metrics
-  M <- estimate_margin(S)            # coherence window
-  V <- estimate_drift(S, history)    # entropy velocity  dM/dt
-  R <- estimate_reserve(S)           # correction capacity
+loop every Δt:
+  S ← ambient_sample()              # no agent interrogation, only field metrics
+  M ← estimate_margin(S)            # coherence window
+  V ← estimate_drift(S, history)    # entropy velocity  dM/dt
+  R ← estimate_reserve(S)           # correction capacity
 
   if M < M_min or (V < 0 and M/|V| < horizon_min):
-      C <- couple_down(C, severity(M, V, R))   # throttle, smooth, add redundancy
-      C <- rephase_if_needed(C, S)             # resync clocks/order/expectations
+      C ← couple_down(C, severity(M, V, R))   # throttle, smooth, add redundancy
+      C ← rephase_if_needed(C, S)             # resync clocks/order/expectations
   else if M > M_target and stable(V):
-      C <- couple_up(C, small_step)            # widen throughput carefully
+      C ← couple_up(C, small_step)            # widen throughput carefully
 
   apply(C)
   log(M, V, R, C)                              # diagnostics = first-class
@@ -104,7 +101,7 @@ loop every dt:
 Apply changes, emit telemetry, record deltas.
 Coherence Loop (invariant-first, policy-free)
 
-Goal: maintain a coherence margin above a threshold by adapting coupling, not by "governing" behavior.
+Goal: maintain a coherence margin above a threshold by adapting coupling, not by “governing” behavior.
 
 ### recommended horizon model (v0)
 
@@ -124,7 +121,7 @@ H_eff(t) = H(t) * clamp( R(t), R_min..1 )
 ### Coherence Engineering: A Substrate Standard for Adaptive Systems
 
 Modern adaptive systems
---distributed networks, agent swarms, blockchains, market-makers, and orchestration layers--
+—distributed networks, agent swarms, blockchains, market-makers, and orchestration layers—
 do not primarily fail because they lack intelligence or incentives.
 They fail because they lack operating margin under load and do not implement robust feedback
 loops that preserve structure as the environment shifts.
@@ -142,9 +139,9 @@ equalization, clock recovery, and fault localization.
 
 We propose Coherence Engineering: a substrate-first discipline that treats coherence as an operational
 quantity analogous to signal integrity in high-speed hardware. In electrical systems, engineers do not
-"align" bits; they preserve reliable transmission by maintaining margin (eye opening, BER, COM) under
+“align” bits; they preserve reliable transmission by maintaining margin (eye opening, BER, COM) under
 dynamic switching noise. The same principle applies across computational and socio-technical systems: 
-preserve the "eye diagram" of actionable structure by monitoring ambient field variables and applying 
+preserve the “eye diagram” of actionable structure by monitoring ambient field variables and applying 
 local corrective coupling (equalization) to prevent drift and collapse.
 
 Coherence Engineering generalizes this discipline to any complex adaptive system. It treats
@@ -168,8 +165,8 @@ ii) the rate at which that margin decays.
 This enables prediction of collapse horizons and proactive stabilization.
 
 3) The Coherence Loop Primitive
-A minimal feedback structure--
-> sense -> estimate margin -> estimate drift -> adapt coupling -> log
+A minimal feedback structure—
+> sense → estimate margin → estimate drift → adapt coupling → log
 
 This loop corresponds directly to established signal integrity mechanisms:
 equalization, re-timing, backpressure, redundancy, and re-synchronization. 
@@ -190,7 +187,7 @@ This provides adaptation without centralized governance, and robustness without 
 
 - brittle automation corresponds to throughput without margin accounting, and 
 
-- "alignment" becomes an emergent property of systems that preserve coherence under load.
+- “alignment” becomes an emergent property of systems that preserve coherence under load.
 
 Coherence Engineering reframes failures in markets, blockchains, and agents as signal integrity failures: 
 systems designed for speed and extraction without coherence margin tracking. 
@@ -278,54 +275,54 @@ control envelope, rather than purely policy-based constraints.
 ##   ii) Full Diagram
 
 ```
-+--------------------------------------------------------------------+
-| Applications / Agents / Strategies                                 |
-|  - planners, tools, market actors, task solvers                     |
-+-------------------------------^------------------------------------+
-                                | (actions / tool calls / trades / messages)
-+-------------------------------|------------------------------------+
-| Coherence Interface Layer                                           |
-|  - invariant contracts (what must remain true)                      |
-|  - typed primitives + diagnostics hooks                             |
-|  - decoy/turn/probe patterns (safe exploration)                     |
-+-------------------------------^------------------------------------+
-                                |
-+-------------------------------|------------------------------------+
-| Coherence Loop Runtime (the core)                                   |
-|  ASIS: ambient sensing -> margin estimation -> drift -> reserve     |
-|  - Negentropy / CoherenceMargin / DriftVelocity                     |
-|  - failure horizon prediction                                       |
-|  - coupling controller (equalizer)                                  |
-|  - rephase / resync (CDR analogue)                                  |
-+-------------------------------^------------------------------------+
-                                | controls (C): pace, batch, mux, redundancy, fanout
-+-------------------------------|------------------------------------+
-| FlowController / Adaptive Batching / Backpressure                   |
-|  - concurrency shaping, queue slope control                         |
-|  - hysteresis + anti-ringing (no oscillatory control)               |
-+-------------------------------^------------------------------------+
-                                |
-+-------------------------------|------------------------------------+
-| Transport Layer (QWormhole / QUIC mux / device registry)            |
-|  - multiplexing, routing, session continuity                        |
-|  - capability negotiation + link training                           |
-|  - packetization strategies influenced by coherence margin          |
-+-------------------------------^------------------------------------+
-                                |
-+-------------------------------|------------------------------------+
-| Substrate / Acceleration                                            |
-|  - native bindings, SIMD/FFT/wavelets, FPGA hooks                    |
-|  - deterministic sampling + fast margin computation                 |
-+--------------------------------------------------------------------+
-```
+┌──────────────────────────────────────────────────────────────────────┐
+│ Applications / Agents / Strategies                                   │
+│  - planners, tools, market actors, task solvers                      │
+└───────────────▲──────────────────────────────────────────────────────┘
+                │ (actions / tool calls / trades / messages)
+┌───────────────┴──────────────────────────────────────────────────────┐
+│ Coherence Interface Layer                                             │
+│  - invariant contracts (what must remain true)                        │
+│  - typed primitives + diagnostics hooks                               │
+│  - decoy/turn/probe patterns (safe exploration)                       │
+└───────────────▲──────────────────────────────────────────────────────┘
+                │
+┌───────────────┴──────────────────────────────────────────────────────┐
+│ Coherence Loop Runtime (the core)                                     │
+│  ASIS: ambient sensing → margin estimation → drift → reserve          │
+│  - Negentropy / CoherenceMargin / DriftVelocity                       │
+│  - failure horizon prediction                                         │
+│  - coupling controller (equalizer)                                    │
+│  - rephase / resync (CDR analogue)                                    │
+└───────────────▲──────────────────────────────────────────────────────┘
+                │ controls (C): pace, batch, mux, redundancy, fanout
+┌───────────────┴──────────────────────────────────────────────────────┐
+│ FlowController / Adaptive Batching / Backpressure                     │
+│  - concurrency shaping, queue slope control                           │
+│  - hysteresis + anti-ringing (no oscillatory control)                 │
+└───────────────▲──────────────────────────────────────────────────────┘
+                │
+┌───────────────┴──────────────────────────────────────────────────────┐
+│ Transport Layer (QWormhole / QUIC mux / device registry)              │
+│  - multiplexing, routing, session continuity                          │
+│  - capability negotiation + link training                             │
+│  - packetization strategies influenced by coherence margin            │
+└───────────────▲──────────────────────────────────────────────────────┘
+                │
+┌───────────────┴──────────────────────────────────────────────────────┐
+│ Substrate / Acceleration                                              │
+│  - native bindings, SIMD/FFT/wavelets, FPGA hooks                      │
+│  - deterministic sampling + fast margin computation                    │
+└──────────────────────────────────────────────────────────────────────┘
 
+```
 
 
 ## E) Manifesto (tight, non-hype)
 
 Coherence Engineering
 
-Most systems don't fail because they're "not intelligent enough."
+Most systems don’t fail because they’re “not intelligent enough.”
 They fail because they cannot stay coherent under load.
 Coherence Engineering is the discipline of keeping systems real under load.
 
@@ -338,7 +335,7 @@ We built agents that act faster than they can revise.
 We built markets that clear faster than humans can understand.
 We built chains that finalize faster than accountability can form.
 
-Speed didn't remove extraction.
+Speed didn’t remove extraction.
 It made extraction harder to see and easier to scale.
 
 We need measurement as a primitive, and adaptation as a law.
@@ -346,26 +343,26 @@ We need measurement as a primitive, and adaptation as a law.
 Coherence is the preserved ability to coordinate meaningfully as conditions change.
 
 It's not a moral principle nor is it compliance.
-It's not governance, as we do not need more governance for systems we cannot measure.
-It's not alignment rhetoric, as systems collapse when they cannot perceive their own integrity envelope.
+It’s not governance, as we do not need more governance for systems we cannot measure.
+It’s not alignment rhetoric, as systems collapse when they cannot perceive their own integrity envelope.
 
-It's the margin that keeps structure intact while reality moves. 
+It’s the margin that keeps structure intact while reality moves. 
 
 The world is non-stationary. Any system that assumes stability is building its own cliff.
 
 In hardware, engineers learned this decades ago:
-you don't "control" the bits into truth.
-You preserve the channel's integrity so truth can survive transmission.
+you don’t “control” the bits into truth.
+You preserve the channel’s integrity so truth can survive transmission.
 
 The same law applies everywhere:
 a system that cannot sense its own coherence margin cannot adapt.
 It can only execute.
 
-So we stop "optimizing."
+So we stop “optimizing.”
 We start preserving operating margins.
 We make measurements first-class primitives.
 Not as rewards. Not as levers.
-As field variables--like voltage, phase, and jitter.
+As field variables—like voltage, phase, and jitter.
 
 Adaptation is equalization.
 Revision is retiming.
@@ -378,7 +375,6 @@ Let behavior emerge inside stable physics.
 
 
 ## v0 implementation skeleton (TypeScript-friendly)
-
 
 ```ts
 export type Margin = number;     // [0,1]
@@ -427,7 +423,7 @@ export class CoherenceLoop {
   }
 
   estimate(): CoherenceState {
-    // v0 heuristic examples -- replace with your FFT/wavelet estimators later
+    // v0 heuristic examples — replace with your FFT/wavelet estimators later
     const n = this.history.length;
     if (n < 2) return { M: 1, V: 0, R: 1, H: Infinity };
 
@@ -448,10 +444,7 @@ export class CoherenceLoop {
     const heat = Math.max(0, b.queueSlope) + (b.corrSpike ?? 0);
     const R = clamp01(1 / (1 + 2 * heat));
 
-    const H =
-      V < 0
-        ? (M / Math.max(1e-6, Math.abs(V))) * Math.max(0.2, R)
-        : Infinity;
+    const H = V < 0 ? (M / Math.max(1e-6, Math.abs(V))) * Math.max(0.2, R) : Infinity;
 
     return { M, V, R, H };
   }
@@ -571,10 +564,7 @@ export class CoherenceLoop {
     const heat = Math.max(0, b.queueSlope) + (b.corrSpike ?? 0);
     const R = clamp01(1 / (1 + 2 * heat));
 
-    const H =
-      V < 0
-        ? (M / Math.max(1e-6, Math.abs(V))) * Math.max(0.2, R)
-        : Infinity;
+    const H = V < 0 ? (M / Math.max(1e-6, Math.abs(V))) * Math.max(0.2, R) : Infinity;
 
     return { M, V, R, H };
   }

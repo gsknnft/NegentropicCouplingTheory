@@ -56,7 +56,7 @@ export const WaveletScalogram: React.FC<WaveletScalogramProps> = ({
     let coeffs: number[][] = [];
     try {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const qwave: WaveletModule = require('@sigilnet/QWave');
+      const qwave: WaveletModule = require('@sigilnet/qwave');
       const lvl = levels ?? Math.max(1, Math.floor(Math.log2(series.length)) - 2);
       const raw = qwave?.wavedec ? qwave.wavedec(series, waveletName, lvl) : null;
       if (raw) coeffs = flattenCoeffs(raw);

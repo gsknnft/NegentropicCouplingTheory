@@ -1,12 +1,10 @@
-export type Margin = number; // [0,1]
-export type Drift = number; // dM/dt (units per second)
-export type Reserve = number; // [0,1]
-
 export interface FieldSample {
+  [key: string]: unknown;
   t: number;
   latencyP50: number;
   latencyP95: number;
   latencyP99: number;
+  latency_var?: number;
   errRate: number;
   queueDepth: number;
   queueSlope: number;
@@ -21,12 +19,37 @@ export interface CouplingParams {
 }
 
 export interface CoherenceState {
-  M: Margin;
-  V: Drift;
-  R: Reserve;
+  M: number;
+  V: number;
+  R: number;
   H: number;
   confidence?: number;
 }
+
+export interface CoherencePrimitives {
+  getCurrentState: () => CoherenceState;
+  getCurrentCoupling: () => CouplingParams;
+  estimate: (params: Partial<CouplingParams>) => CoherenceState;
+  estimateMargin: (signal: number[]) => number;
+  adapt: (
+    M: number,
+    V: number,
+    R: number,
+    C?: CoherenceState,
+  ) => CouplingParams;
+  estimateDrift: (signal: number[]) => number;
+  estimateResponsiveness: (signal: number[]) => number;
+}
+
+export type CoherenceMode = "observe" | "enforce";
+
+export type CoherenceSet =
+  | "BALANCED"
+  | "PROTECT"
+  | "MACRO_BATCH"
+  | "CUSTOM"
+  | "OFF"
+  | "SAFE";
 
 export interface CoherenceConfig {
   Hmin: number;

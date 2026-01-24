@@ -2,7 +2,7 @@ import {
   defaultSimulationConfig,
   formatFailureDiary,
   runCoherenceSimulation,
-} from "../src/coherence/sim";
+} from "../packages/coherence/sim";
 
 function readNumber(value: string | undefined): number | undefined {
   if (!value) return undefined;
