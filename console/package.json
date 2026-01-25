@@ -43,7 +43,7 @@
     "start:preload": "cross-env NODE_ENV=development TS_NODE_TRANSPILE_ONLY=true vite --config electron.vite.config.ts",
     "start:renderer": "cross-env NODE_ENV=development TS_NODE_TRANSPILE_ONLY=true vite",
     "doctor:native": "ts-node scripts/check-native-dep.ts",
-    "test": "jest"
+    "test": "vitest run"
   },
   "browserslist": [
     "extends browserslist-config-erb"

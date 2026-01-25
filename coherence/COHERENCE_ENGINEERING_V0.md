@@ -373,6 +373,78 @@ Build the substrate.
 Track the margins.
 Let behavior emerge inside stable physics.
 
+## F) Negentropic Basin Operator (NBO)
+
+The NBO is a bounded variational operator that makes the abstract coupling law
+computable. It searches for a coupling configuration that minimizes Shannon
+entropy under soft geometric constraints, revealing a local negentropic basin.
+
+### Formal positioning (NCF)
+
+Let the signal be a probability field over nodes or edges.
+Let x be a control parameter (policy pressure / transport bias / phase shift).
+Let H be Shannon entropy, and N be bounded negentropy:
+
+N = 1 - H / H_max
+
+The NBO solves a bounded local problem:
+
+Find x* in [lo, hi] that minimizes:
+  H(signal + coupling_strength * (W @ x)) + penalty(x)
+
+Where:
+- W is a topology matrix (trust/adjacency), typically row-normalized.
+- penalty(x) enforces boundary distance, minimum probability mass, and ridge
+  regularization to prevent singular entropy collapse.
+
+This makes the abstract coupling law computable by finding minima of G:
+
+x_{t+1} = F(x_t) + G(N, C, v), x_t
+
+The NBO numerically discovers the minima of G.
+
+### Outputs (theory semantics)
+
+- stable_state: argmin x* (basin location / policy pressure)
+- epiplexity: H_before - H_after (realized negentropic work, in bits)
+- negentropic_gain: N_after - N_before
+- basin_width_raw: curvature-derived width of the basin (entropy-only)
+- basin_width_penalty: curvature-derived sensitivity to constraints
+- epiplexity_per_node: per-dimension attribution of entropy reduction
+- epiplexity_weights: normalized attribution weights (sum of |w| = 1)
+- alignment:
+  - stabilizing if epiplexity_per_node > 0
+  - destabilizing if epiplexity_per_node < 0
+  - neutral if epiplexity_per_node == 0
+
+### Telemetry contract (freshness-aware)
+
+The NBO is recomputed on a cadence but emitted on every flush to keep telemetry
+shape stable. Staleness is explicit:
+
+nbo.updatedAt: timestamp of last NBO solve
+nbo.ageMs: now - updatedAt
+
+Consumers can gate on freshness without branching on missing fields.
+
+### Recommended Phase 1 wiring (theory)
+
+Topology W:
+Use the trust graph (peer x peer). Normalize rows to a stochastic matrix.
+
+Signal:
+Use runtime flow pressure signals (latencyP95, errRate, queueSlope, corrSpike).
+
+This pairing answers:
+"Which peers, under real load, are structurally contributing to or resisting order?"
+
+### When boundary minima are correct
+
+If the signal is already skewed, coupling is global, and there are no competing
+modes, the minimum will stick near a bound. This indicates a tilted potential,
+not a symmetric well. Interior minima appear when the field contains competing
+modes or coupling varies per component.
+
 
 ## v0 implementation skeleton (TypeScript-friendly)
 

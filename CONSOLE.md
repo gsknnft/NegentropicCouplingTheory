@@ -128,6 +128,22 @@ Statistics and logs:
 - Real-time edge metrics
 - Policy assignment logs
 
+### 5. NBO Visualization (theory mapping)
+
+Negentropic Basin Operator outputs map cleanly into the UI as diagnostic layers:
+
+- **Basin depth**: `epiplexity` -> glow intensity or bar height
+- **Pressure**: `stable_state` -> arrow bias / directional indicator
+- **Width / confidence**: `basin_width_raw`, `basin_width_penalty` -> ring width or halo thickness
+- **Top contributors**: `topNodes` list, with `alignment` color
+  - stabilizing = green
+  - destabilizing = red
+  - neutral = gray
+- **Freshness**: `updatedAt` + `ageMs` -> staleness badge / faded styling
+
+This keeps the telemetry shape stable while letting the UI decide how "fresh"
+the NBO field needs to be for display or control hints.
+
 ---
 
 ## Security Features
